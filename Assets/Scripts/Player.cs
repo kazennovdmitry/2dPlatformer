@@ -30,10 +30,15 @@ public class Player : MonoBehaviour {
         gravity = -(jumpHeight * 2) / Mathf.Pow(timeToJumpApex, 2);
         jumpVelocity = Mathf.Abs(gravity) * timeToJumpApex;
         print("Gravity: " + gravity + " Jump Velocity: " + jumpVelocity);
+        //расстояние = начальная скорость * время + (ускорение * время в квадрате)/2
+        //откуда ускорение (гравитация) = (расстояние прыжка * 2)/время прыжка в квадрате
+        //скорость = начальной скорости + ускорение * время
     }
 
     void Update()
     {
+        if (Input.GetKeyDown(KeyCode.Escape)) Application.Quit();
+
         if (controller.collisions.above || controller.collisions.below)
         {
             velocity.y = 0;//пока объект игрока на горизонтальной повехрности, ускорение падения не увеличивается
@@ -45,7 +50,6 @@ public class Player : MonoBehaviour {
             velocity.y = jumpVelocity;
         }
         //добавление притяжения:
-        //velocity.x = input.x * moveSpeed;
         float targetVelocityX = input.x * moveSpeed;
         velocity.x = Mathf.SmoothDamp(velocity.x, targetVelocityX, ref velocityXSmoothing, (controller.collisions.below)? accelerationTimeGrounded : accelerationTimeAirborne);//Gradually changes a value towards a desired goal over time.
         //эта строчка делает изменение скорости постепенным, причем в воздухе и на земле скорость по оси x меняется немного по-разному
