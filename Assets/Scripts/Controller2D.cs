@@ -5,31 +5,21 @@ using UnityEngine;
 //самостоятельная реализация расчета столкновений вместо компонента RigidBody2d
 //для оценки столкновений используются лучи с начальными точками в объекте
 
-[RequireComponent(typeof(BoxCollider2D))]//требуемые компоненты
-public class Controller2D : MonoBehaviour {
-
-	public LayerMask collisionMask;
-
-	const float skinWidth = .015f;//"оболочка" объекта, начальные точки лучей столкновений лежат немного внутри объекта
-	public int horizontalRayCount = 4;
-	public int verticalRayCount = 4;
+public class Controller2D : RaycastController {//странный синтаксис наследования
 
 	float maxClimbAngle = 80;
-    float maxDescendAngle = 75;
+    float maxDescendAngle = 80;
 
-	float horizontalRaySpacing;
-	float verticalRaySpacing;
+    public 
 
-	BoxCollider2D collider;
-	RaycastOrigins raycastOrigins;
 	public CollisionInfo collisions;
 
-	void Start() {
-		collider = GetComponent<BoxCollider2D> ();
-		CalculateRaySpacing ();
-	}
+    public override void Start()// полиформизм методов в C# отличается от Java
+    {
+        base.Start();
+    }
 
-	public void Move(Vector3 velocity) {
+    public void Move(Vector3 velocity, bool standingOnPlatform = false) {
 		UpdateRaycastOrigins ();
 		collisions.Reset ();
 
@@ -44,6 +34,8 @@ public class Controller2D : MonoBehaviour {
 		}
 
 		transform.Translate (velocity);
+
+        if (standingOnPlatform) collisions.below = true;//эту информацию получаем из контроллера платформ.
 	}
 
 	void HorizontalCollisions(ref Vector3 velocity) {
@@ -61,6 +53,8 @@ public class Controller2D : MonoBehaviour {
             
             //проверка столкновения луча hit с препятствием:  
             if (hit) {
+
+                if (hit.distance == 0) continue; //пропуск проверки в случае, если опускающаяся платформа проходит через игрока
 
 				float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);//RaycastHit2D.normal is the normal vector of the surface hit by the ray.
                 //угол между нормалом луча (перпендикуляр к встреченной наклонной) и вектором вверх (такой угол равен углу наклонной к горизонту)
@@ -175,33 +169,6 @@ public class Controller2D : MonoBehaviour {
 			}
 		}
 }
-
-
-    void UpdateRaycastOrigins() { //обновление начальных точек лучей - привязка лучей в объекту
-		Bounds bounds = collider.bounds;
-		bounds.Expand (skinWidth * -2);
-
-		raycastOrigins.bottomLeft = new Vector2 (bounds.min.x, bounds.min.y);
-		raycastOrigins.bottomRight = new Vector2 (bounds.max.x, bounds.min.y);
-		raycastOrigins.topLeft = new Vector2 (bounds.min.x, bounds.max.y);
-		raycastOrigins.topRight = new Vector2 (bounds.max.x, bounds.max.y);
-	}
-
-	void CalculateRaySpacing() { //расчитываем расстояния между лучами
-		Bounds bounds = collider.bounds; //получаем границы
-        bounds.Expand (skinWidth * -2); //сужение границ на ширину оболочки - т.е. начальные точки лучей лежат немного внутри объекта
-
-        horizontalRayCount = Mathf.Clamp (horizontalRayCount, 2, int.MaxValue); //ограничиваем возможное количество лучшей между 2 и максимальным int
-        verticalRayCount = Mathf.Clamp (verticalRayCount, 2, int.MaxValue);
-
-		horizontalRaySpacing = bounds.size.y / (horizontalRayCount - 1); // интервалы = сторона объекта / количество промежутков (количество лучей - 1)
-        verticalRaySpacing = bounds.size.x / (verticalRayCount - 1);
-	}
-
-	struct RaycastOrigins { //начальные точки лучей
-		public Vector2 topLeft, topRight;
-		public Vector2 bottomLeft, bottomRight;
-	}
 
 	public struct CollisionInfo {
 		public bool above, below;

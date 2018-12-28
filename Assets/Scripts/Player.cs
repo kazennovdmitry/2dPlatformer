@@ -43,13 +43,14 @@ public class Player : MonoBehaviour {
         {
             velocity.y = 0;//пока объект игрока на горизонтальной повехрности, ускорение падения не увеличивается
         }
-        //вектор от управления игроком:
-        Vector2 input = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
+        
+        Vector2 input = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));//вектор от управления игроком
         if (Input.GetKeyDown(KeyCode.Space) && controller.collisions.below) //прыжок возможен только с горизонтальной поверхности
         {
             velocity.y = jumpVelocity;
         }
-        //добавление притяжения:
+        
+        //влияние притяжения
         float targetVelocityX = input.x * moveSpeed;
         velocity.x = Mathf.SmoothDamp(velocity.x, targetVelocityX, ref velocityXSmoothing, (controller.collisions.below)? accelerationTimeGrounded : accelerationTimeAirborne);//Gradually changes a value towards a desired goal over time.
         //эта строчка делает изменение скорости постепенным, причем в воздухе и на земле скорость по оси x меняется немного по-разному
