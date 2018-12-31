@@ -20,9 +20,14 @@ public class RaycastController : MonoBehaviour
     public BoxCollider2D collider;
     public RaycastOrigins raycastOrigins;
 
-    public virtual void Start()
+    public virtual void Awake()// Awake вызывается перед Start
+        //Usually Awake() is used to initialize if certain values or script are dependent on each other and would cause errors if one of them is initialized too late(awake runs before the game starts). Awake is also called only once for every script instance.
     {
         collider = GetComponent<BoxCollider2D>();
+    }
+
+    public virtual void Start()
+    {
         CalculateRaySpacing();
     }
 

@@ -37,6 +37,8 @@ public class Player : MonoBehaviour {
 
     void Update()
     {
+        bool wallSliding = false;
+
         if (Input.GetKeyDown(KeyCode.Escape)) Application.Quit();
 
         if (controller.collisions.above || controller.collisions.below)

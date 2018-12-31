@@ -5,12 +5,10 @@ using UnityEngine;
 //самостоятельная реализация расчета столкновений вместо компонента RigidBody2d
 //для оценки столкновений используются лучи с начальными точками в объекте
 
-public class Controller2D : RaycastController {//странный синтаксис наследования
+public class Controller2D : RaycastController {//синтаксис наследования С#
 
 	float maxClimbAngle = 80;
     float maxDescendAngle = 80;
-
-    public 
 
 	public CollisionInfo collisions;
 
