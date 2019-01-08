@@ -8,8 +8,11 @@ public class RaycastController : MonoBehaviour
     public LayerMask collisionMask;
 
     public const float skinWidth = .015f;
-    public int horizontalRayCount = 4;
-    public int verticalRayCount = 4;
+    const float dstBetweenRays = 0.25f;
+    [HideInInspector]
+    public int horizontalRayCount;
+    [HideInInspector]
+    public int verticalRayCount;
 
     [HideInInspector]
     public float horizontalRaySpacing;
@@ -20,8 +23,8 @@ public class RaycastController : MonoBehaviour
     public BoxCollider2D collider;
     public RaycastOrigins raycastOrigins;
 
-    public virtual void Awake()// Awake вызывается перед Start
-        //Usually Awake() is used to initialize if certain values or script are dependent on each other and would cause errors if one of them is initialized too late(awake runs before the game starts). Awake is also called only once for every script instance.
+    public virtual void Awake()
+        // Usually Awake() is used to initialize if certain values or script are dependent on each other and would cause errors if one of them is initialized too late(awake runs before the game starts). Awake is also called only once for every script instance.
     {
         collider = GetComponent<BoxCollider2D>();
     }
@@ -47,8 +50,10 @@ public class RaycastController : MonoBehaviour
         Bounds bounds = collider.bounds;
         bounds.Expand(skinWidth * -2);
 
-        horizontalRayCount = Mathf.Clamp(horizontalRayCount, 2, int.MaxValue);
-        verticalRayCount = Mathf.Clamp(verticalRayCount, 2, int.MaxValue);
+        float boundsWidth = bounds.size.x;
+        float boundsHeight = bounds.size.y;
+        horizontalRayCount = Mathf.RoundToInt(boundsHeight/dstBetweenRays);
+        verticalRayCount = Mathf.RoundToInt(boundsWidth/dstBetweenRays);
 
         horizontalRaySpacing = bounds.size.y / (horizontalRayCount - 1);
         verticalRaySpacing = bounds.size.x / (verticalRayCount - 1);

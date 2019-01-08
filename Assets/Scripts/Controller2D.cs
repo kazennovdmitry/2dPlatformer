@@ -2,185 +2,308 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-//самостоятельная реализация расчета столкновений вместо компонента RigidBody2d
-//для оценки столкновений используются лучи с начальными точками в объекте
+//custom collisions controller instead of RigidBody2d
 
-public class Controller2D : RaycastController {//синтаксис наследования С#
+public class Controller2D : RaycastController {
 
-	float maxClimbAngle = 80;
-    float maxDescendAngle = 80;
+	public float maxSlopeAngle = 80;
 
 	public CollisionInfo collisions;
+    [HideInInspector]
+    public Vector2 playerInput;
+    // It is public for camera adjustment.
 
-    public override void Start()// полиформизм методов в C# отличается от Java
+    public override void Start()
     {
         base.Start();
+        collisions.faceDir = 1;
     }
 
-    public void Move(Vector3 velocity, bool standingOnPlatform = false) {
+    public void Move(Vector2 moveAmount, bool standingOnPlatform)
+    {
+        Move(moveAmount, Vector2.zero, standingOnPlatform);
+    }
+
+    public void Move(Vector2 moveAmount, Vector2 input, bool standingOnPlatform = false)
+        //overloading method Move() for getting Player's input
+    {
 		UpdateRaycastOrigins ();
 		collisions.Reset ();
+        collisions.moveAmountOld = moveAmount;
+        playerInput = input;
 
-        if (velocity.y < 0) {
-            DescendSlope(ref velocity);
+        if (moveAmount.y < 0)
+        {
+            DescendSlope(ref moveAmount);
+            // Processing slope descension.
         }
-		if (velocity.x != 0) {
-			HorizontalCollisions (ref velocity);
-		}
-		if (velocity.y != 0) {
-			VerticalCollisions (ref velocity);
+
+        if (moveAmount.x != 0)
+        {
+            collisions.faceDir = (int)Mathf.Sign(moveAmount.x);
+        }
+
+        HorizontalCollisions(ref moveAmount);
+
+        if (moveAmount.y != 0)
+        {
+			VerticalCollisions (ref moveAmount);
 		}
 
-		transform.Translate (velocity);
+		transform.Translate (moveAmount);
 
-        if (standingOnPlatform) collisions.below = true;//эту информацию получаем из контроллера платформ.
+        if (standingOnPlatform)
+        {
+            collisions.below = true;
+            // This way a jump is possible from a slope.
+        }
+            
 	}
 
-	void HorizontalCollisions(ref Vector3 velocity) {
-		float directionX = Mathf.Sign (velocity.x);
-		float rayLength = Mathf.Abs (velocity.x) + skinWidth;
+	void HorizontalCollisions(ref Vector2 moveAmount) {
+		float directionX = collisions.faceDir;
+		float rayLength = Mathf.Abs (moveAmount.x) + skinWidth;
+
+        if (Mathf.Abs(moveAmount.x) < skinWidth)
+        {
+            rayLength = 2 * skinWidth;
+            //Jumping directrly up next to the wall makes Player slide down
+        }
 		
 		for (int i = 0; i < horizontalRayCount; i ++) {
 			Vector2 rayOrigin = (directionX == -1)?raycastOrigins.bottomLeft:raycastOrigins.bottomRight;
-            //если мы движемся влево, то рисуем лучи столкновений из левой стороны, иначе из правой
-            rayOrigin += Vector2.up * (horizontalRaySpacing * i);//лучи рисуются с промежутками
+            // Sending collision rays.
+            rayOrigin += Vector2.up * (horizontalRaySpacing * i);
             RaycastHit2D hit = Physics2D.Raycast(rayOrigin, Vector2.right * directionX, rayLength, collisionMask);
-            //collisionMask - переменная, которая в инспекторе объекта привязывается к слоям
+            // collisionMask variable is being set in the Inspector window.
 
-            Debug.DrawRay(rayOrigin, Vector2.right * directionX * rayLength,Color.red);
+            Debug.DrawRay(rayOrigin, Vector2.right * directionX,Color.red);
             
-            //проверка столкновения луча hit с препятствием:  
             if (hit) {
 
-                if (hit.distance == 0) continue; //пропуск проверки в случае, если опускающаяся платформа проходит через игрока
+                if (hit.distance == 0) continue; 
+                // Skiping the check if the descending platform moves through Player.
 
-				float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);//RaycastHit2D.normal is the normal vector of the surface hit by the ray.
-                //угол между нормалом луча (перпендикуляр к встреченной наклонной) и вектором вверх (такой угол равен углу наклонной к горизонту)
-                //для вертикального препятствия такой угол будет равен 90
-                if (i == 0 && slopeAngle <= maxClimbAngle) { //если для первого(нижнего) луча наклон <= максимальному
-					float distanceToSlopeStart = 0;
-					if (slopeAngle != collisions.slopeAngleOld) { //без этой поправки объект будет подниматься параллельно склону
+				float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
+                // RaycastHit2D.normal is the vector perpendicular to the surface hit by the ray.
+                // slopeAngle is the angle between the normal to the slope and a vector being pointed directly up.
+                if (i == 0 && slopeAngle <= maxSlopeAngle)
+                {
+                    // Checking this only for the first collision ray.
+                    if (collisions.descendingSlope)
+                    {
+                        collisions.descendingSlope = false;
+                        moveAmount = collisions.moveAmountOld;
+                    }
+
+                    float distanceToSlopeStart = 0;
+					if (slopeAngle != collisions.slopeAngleOld) { 
+                        // A minor fix to avoid ascending prematurely.
 						distanceToSlopeStart = hit.distance-skinWidth;
-						velocity.x -= distanceToSlopeStart * directionX;
+						moveAmount.x -= distanceToSlopeStart * directionX;
 					}
-					ClimbSlope(ref velocity, slopeAngle);//метод подъёма по наклонной
-					velocity.x += distanceToSlopeStart * directionX;
+					ClimbSlope(ref moveAmount, slopeAngle, hit.normal);
+					moveAmount.x += distanceToSlopeStart * directionX;
 				}
 
-				if (!collisions.climbingSlope || slopeAngle > maxClimbAngle) { //продолжение движения по горизонтали
-					//velocity.x = (hit.distance - skinWidth) * directionX;
-					//rayLength = hit.distance;
-                    velocity.x = Mathf.Min(Mathf.Abs(velocity.x), (hit.distance - skinWidth)) * directionX;
-                    rayLength = Mathf.Min(Mathf.Abs(velocity.x) + skinWidth, hit.distance);
+				if (!collisions.climbingSlope || slopeAngle > maxSlopeAngle)
+                { 
+                    moveAmount.x = Mathf.Min(Mathf.Abs(moveAmount.x), (hit.distance - skinWidth)) * directionX;
+                    rayLength = Mathf.Min(Mathf.Abs(moveAmount.x) + skinWidth, hit.distance);
 
-                    if (collisions.climbingSlope) {//на случай вертикального препятствия при движении по склону (снижение скорости по Y)
-						velocity.y = Mathf.Tan(collisions.slopeAngle * Mathf.Deg2Rad) * Mathf.Abs(velocity.x);
+                    if (collisions.climbingSlope)
+                        // There is an obstacle on the slope.
+                    {
+						moveAmount.y = Mathf.Tan(collisions.slopeAngle * Mathf.Deg2Rad) * Mathf.Abs(moveAmount.x);
 					}
-
-					collisions.left = directionX == -1; //препятствия
+					collisions.left = directionX == -1;
 					collisions.right = directionX == 1;
 				}
 			}
 		}
 	}
 	
-	void VerticalCollisions(ref Vector3 velocity) {
-		float directionY = Mathf.Sign (velocity.y);
-		float rayLength = Mathf.Abs (velocity.y) + skinWidth;
+	void VerticalCollisions(ref Vector2 moveAmount) {
+		float directionY = Mathf.Sign (moveAmount.y);
+		float rayLength = Mathf.Abs (moveAmount.y) + skinWidth;
 
 		for (int i = 0; i < verticalRayCount; i ++) {
 			Vector2 rayOrigin = (directionY == -1)?raycastOrigins.bottomLeft:raycastOrigins.topLeft;
-			rayOrigin += Vector2.right * (verticalRaySpacing * i + velocity.x);
+			rayOrigin += Vector2.right * (verticalRaySpacing * i + moveAmount.x);
 			RaycastHit2D hit = Physics2D.Raycast(rayOrigin, Vector2.up * directionY, rayLength, collisionMask);
 
-			Debug.DrawRay(rayOrigin, Vector2.up * directionY * rayLength,Color.red);
+			Debug.DrawRay(rayOrigin, Vector2.up * directionY,Color.red);
 
 			if (hit) {
-				//velocity.y = (hit.distance - skinWidth) * directionY;
-				//rayLength = hit.distance;
-                velocity.y = Mathf.Min(Mathf.Abs(velocity.y), (hit.distance - skinWidth)) * directionY;
-                rayLength = Mathf.Min(Mathf.Abs(velocity.y) + skinWidth, hit.distance);
+                // Ability to move vertically through specific obtacles marked with "Through" tag (NES "Contra" style).
+                if (hit.collider.tag == "Through")
+                {
+                    // Jumping through the platform above.
+                    if (directionY == 1 || hit.distance == 0)
+                    {
+                        continue;
+                    }
+                    // Jumping down through the platform.
+                    if (collisions.fallingThroughPlatfom)
+                    {
+                        continue;
+                    }
+                    if (playerInput.y == -1)
+                    {
+                        collisions.fallingThroughPlatfom = true;
+                        Invoke("ResetFallingThroughPlatform", .5f);
+                        continue;
+                    }
 
-                if (collisions.climbingSlope) {//на случай препятствия сверху при движении по склону (снижение скорости по X)
-					velocity.x = velocity.y / Mathf.Tan(collisions.slopeAngle * Mathf.Deg2Rad) * Mathf.Sign(velocity.x);
+                }
+                
+                moveAmount.y = Mathf.Min(Mathf.Abs(moveAmount.y), (hit.distance - skinWidth)) * directionY;
+                rayLength = Mathf.Min(Mathf.Abs(moveAmount.y) + skinWidth, hit.distance);
+
+                if (collisions.climbingSlope)
+                    //there is an obstacle above while Player is on the slope
+                {
+					moveAmount.x = moveAmount.y / Mathf.Tan(collisions.slopeAngle * Mathf.Deg2Rad) * Mathf.Sign(moveAmount.x);
 				}
 
-				collisions.below = directionY == -1; //препятствия
+				collisions.below = directionY == -1;
                 collisions.above = directionY == 1;
 			}
 		}
 
         
-        if (collisions.climbingSlope)//переход с одной наклонной на другую
+        if (collisions.climbingSlope)
+            //clibming from one slope to another
         {
-            float directionX = Mathf.Sign(velocity.x);
-            rayLength = Mathf.Abs(velocity.x) + skinWidth;
-            Vector2 rayOrigin = ((directionX == -1) ? raycastOrigins.bottomLeft : raycastOrigins.bottomRight) + Vector2.up * velocity.y;
+            float directionX = Mathf.Sign(moveAmount.x);
+            rayLength = Mathf.Abs(moveAmount.x) + skinWidth;
+            Vector2 rayOrigin = ((directionX == -1) ? raycastOrigins.bottomLeft : raycastOrigins.bottomRight) + Vector2.up * moveAmount.y;
             RaycastHit2D hit = Physics2D.Raycast(rayOrigin, Vector2.right * directionX, rayLength, collisionMask);
 
             if (hit)
             {
-                float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);//можно вынести построение хитов в отдельный метод?
-                if (slopeAngle != collisions.slopeAngle)//на пути новая наклонная
+                float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
+                if (slopeAngle != collisions.slopeAngle)
+                    //a new slope after current one
                 {
-                    velocity.x = (hit.distance - skinWidth) * directionX;
+                    moveAmount.x = (hit.distance - skinWidth) * directionX;
                     collisions.slopeAngle = slopeAngle;
+                    collisions.slopeNormal = hit.normal;
                 }
             }
 
         }
 	}
 
-	void ClimbSlope(ref Vector3 velocity, float slopeAngle) {
-		float moveDistance = Mathf.Abs (velocity.x);//модуль первоначальной скорости по горизонатали
-		float climbVelocityY = Mathf.Sin (slopeAngle * Mathf.Deg2Rad) * moveDistance; //уменьшение скорости по Y
+	void ClimbSlope(ref Vector2 moveAmount, float slopeAngle, Vector2 slopeNormal)
+    {
+		float moveDistance = Mathf.Abs (moveAmount.x);
+		float climbmoveAmountY = Mathf.Sin (slopeAngle * Mathf.Deg2Rad) * moveDistance;
 
-		if (velocity.y <= climbVelocityY) {//velocity.y будет больше climbVelocity, если мы прыгаем. В прыжке снижение скорости для наклонных нам не нужно
-			velocity.y = climbVelocityY;
-			velocity.x = Mathf.Cos (slopeAngle * Mathf.Deg2Rad) * moveDistance * Mathf.Sign (velocity.x);
-			collisions.below = true;//для возможности прыжка
+		if (moveAmount.y <= climbmoveAmountY) {
+            //moveAmount.y > climbmoveAmount if Player jumps.
+			moveAmount.y = climbmoveAmountY;
+			moveAmount.x = Mathf.Cos (slopeAngle * Mathf.Deg2Rad) * moveDistance * Mathf.Sign (moveAmount.x);
+			collisions.below = true;
+            //making jumping from the slope possible
 			collisions.climbingSlope = true;
-			collisions.slopeAngle = slopeAngle;//на случай изменения наклона
-		}
+			collisions.slopeAngle = slopeAngle;
+            collisions.slopeNormal = slopeNormal;
+        }
 	}
 
-	void DescendSlope(ref Vector3 velocity) {
-		float directionX = Mathf.Sign (velocity.x);
-		Vector2 rayOrigin = (directionX == -1) ? raycastOrigins.bottomRight : raycastOrigins.bottomLeft;
-		RaycastHit2D hit = Physics2D.Raycast (rayOrigin, -Vector2.up, Mathf.Infinity, collisionMask);
+	void DescendSlope(ref Vector2 moveAmount)
+    {
+        RaycastHit2D maxSlopeHitLeft = Physics2D.Raycast(raycastOrigins.bottomLeft, Vector2.down, Mathf.Abs(moveAmount.y) + skinWidth, collisionMask);
+        RaycastHit2D maxSlopeHitRight = Physics2D.Raycast(raycastOrigins.bottomRight, Vector2.down, Mathf.Abs(moveAmount.y) + skinWidth, collisionMask);
+        if (maxSlopeHitLeft ^ maxSlopeHitRight)
+            // If only one condition is met.
+        {
+            SlideDownMaxSlope(maxSlopeHitLeft, ref moveAmount);
+            SlideDownMaxSlope(maxSlopeHitRight, ref moveAmount);
+        }
 
-		if (hit) {
-			float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
-			if (slopeAngle != 0 && slopeAngle <= maxDescendAngle) {
-				if (Mathf.Sign(hit.normal.x) == directionX) {
-					if (hit.distance - skinWidth <= Mathf.Tan(slopeAngle * Mathf.Deg2Rad) * Mathf.Abs(velocity.x)) {
-						float moveDistance = Mathf.Abs(velocity.x);
-						float descendVelocityY = Mathf.Sin (slopeAngle * Mathf.Deg2Rad) * moveDistance;
-						velocity.x = Mathf.Cos (slopeAngle * Mathf.Deg2Rad) * moveDistance * Mathf.Sign (velocity.x);
-						velocity.y -= descendVelocityY;
 
-						collisions.slopeAngle = slopeAngle;
-						collisions.descendingSlope = true;
-						collisions.below = true;
-					}
-				}
-			}
-		}
-}
+        if (!collisions.slidingDownMaxSlope)
+            // Checking for a normal descending.
+        {
+            float directionX = Mathf.Sign(moveAmount.x);
+            Vector2 rayOrigin = (directionX == -1) ? raycastOrigins.bottomRight : raycastOrigins.bottomLeft;
+            RaycastHit2D hit = Physics2D.Raycast(rayOrigin, -Vector2.up, Mathf.Infinity, collisionMask);
 
-	public struct CollisionInfo {
+            if (hit)
+            {
+                float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
+                if (slopeAngle != 0 && slopeAngle <= maxSlopeAngle)
+                {
+                    if (Mathf.Sign(hit.normal.x) == directionX)
+                    {
+                        if (hit.distance - skinWidth <= Mathf.Tan(slopeAngle * Mathf.Deg2Rad) * Mathf.Abs(moveAmount.x))
+                        {
+                            float moveDistance = Mathf.Abs(moveAmount.x);
+                            float descendmoveAmountY = Mathf.Sin(slopeAngle * Mathf.Deg2Rad) * moveDistance;
+                            moveAmount.x = Mathf.Cos(slopeAngle * Mathf.Deg2Rad) * moveDistance * Mathf.Sign(moveAmount.x);
+                            moveAmount.y -= descendmoveAmountY;
+
+                            collisions.slopeAngle = slopeAngle;
+                            collisions.descendingSlope = true;
+                            collisions.below = true;
+                            collisions.slopeNormal = hit.normal;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void SlideDownMaxSlope(RaycastHit2D hit, ref Vector2 moveAmount)
+    {
+
+        if (hit)
+        {
+            float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
+            if (slopeAngle > maxSlopeAngle)
+            {
+                moveAmount.x = Mathf.Sign(hit.normal.x) * (Mathf.Abs(moveAmount.y) - hit.distance) / Mathf.Tan(slopeAngle * Mathf.Deg2Rad);
+                // Tan(angle) = (movement.y - hitDst) / movement.x -> movement.x = (movement.y - hitDst) / Tan(angle).
+                // Mathf.Sign(hit.normal.x) for determining the direction.
+
+                collisions.slopeAngle = slopeAngle;
+                collisions.slidingDownMaxSlope = true;
+                collisions.slopeNormal = hit.normal;
+            }
+        }
+
+    }
+
+    void ResetFallingThroughPlatform()
+    {
+        collisions.fallingThroughPlatfom = false;
+    }
+
+	public struct CollisionInfo
+    {
 		public bool above, below;
 		public bool left, right;
 
 		public bool climbingSlope;
         public bool descendingSlope;
-        public float slopeAngle, slopeAngleOld; //для более точной реализации движения по наклонной
+        public bool slidingDownMaxSlope;
 
-        public void Reset() {
+        public float slopeAngle, slopeAngleOld;
+        public Vector2 slopeNormal;
+        public Vector2 moveAmountOld;
+        public bool fallingThroughPlatfom;
+        public int faceDir;
+
+        public void Reset()
+        {
 			above = below = false;
 			left = right = false;
 			climbingSlope = false;
             descendingSlope = false;
+            slidingDownMaxSlope = false;
+            slopeNormal = Vector2.zero;
 
             slopeAngleOld = slopeAngle;
 			slopeAngle = 0;

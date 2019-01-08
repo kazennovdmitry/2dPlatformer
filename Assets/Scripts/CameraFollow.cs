@@ -5,21 +5,24 @@ using UnityEngine;
 public class CameraFollow : MonoBehaviour
 {
     public Controller2D target;
-    //параметры камеры задаются в инспекторе
-    public Vector2 focusAreaSize;//размер зоны фокуса, перемещение игрока в пределах которой не вызывает перемещения камеры
-    public float verticalOffset;//вертикальный отступ (чуть выше центра объекта Игрока)
-    public float lookAheadDstX;//расстояние упреждения
-    public float lookSmoothTime;//сглаживание движения камеры
-    public float verticalSmoothTime;//сглаживание движения камеры, для длинных падений/прыжков брать равным 0
+    // camera parametras
+    public Vector2 focusAreaSize;
+    public float verticalOffset;
+    // vertical offset up from Player center
+    public float lookAheadDstX;
+    public float lookSmoothTime;
+    public float verticalSmoothTime;
+    //for long jumps down make it 0
 
     FocusArea focusArea;
 
     float currentLookAheadX;
     float targetLookAheadX;
     float lookAheadDirX;
+    // Camera movements adjustments.
     float smoothLookVelocityX;
     float smoothVelocityY;
-
+    bool lookAheadStopped;
 
     void Start()
     {
@@ -29,10 +32,10 @@ public class CameraFollow : MonoBehaviour
     void OnDrawGizmos()
     {
         Gizmos.color = new Color(1, 0, 0, .5f);
-        Gizmos.DrawCube(focusArea.centre, focusAreaSize);//отображние зоны фокуса
+        Gizmos.DrawCube(focusArea.centre, focusAreaSize);
     }
 
-    void LateUpdate() //метод, вызываемый последним в текущем кадре
+    void LateUpdate()
     {
         focusArea.Update(target.collider.bounds);
         Vector2 focusPosition = focusArea.centre + Vector2.up * verticalOffset;
@@ -40,11 +43,28 @@ public class CameraFollow : MonoBehaviour
         if (focusArea.velocity.x != 0)
         {
             lookAheadDirX = Mathf.Sign(focusArea.velocity.x);
+            if (Mathf.Sign(target.playerInput.x) == Mathf.Sign(focusArea.velocity.x) && target.playerInput.x != 0)
+            {
+                lookAheadStopped = false;
+                targetLookAheadX = lookAheadDirX * lookAheadDstX;
+                // Camera follows Player direction to full extent.
+            }
+            else
+            {
+                if (!lookAheadStopped)
+                {
+                    lookAheadStopped = true;
+                    targetLookAheadX = currentLookAheadX + (lookAheadDirX * lookAheadDstX - currentLookAheadX) / 4;
+                    // A little trim to camera.
+                }
+            }
         }
-        targetLookAheadX = lookAheadDirX * lookAheadDstX;
-        currentLookAheadX = Mathf.SmoothDamp(currentLookAheadX, targetLookAheadX, ref smoothLookVelocityX, lookSmoothTime); 
-        //Gradually changes a value towards a desired goal over time.
+        
+        currentLookAheadX = Mathf.SmoothDamp(currentLookAheadX, targetLookAheadX, ref smoothLookVelocityX, lookSmoothTime);
+        // Gradually changes a value towards a desired goal over time.
 
+        focusPosition.y = Mathf.SmoothDamp(transform.position.y, focusPosition.y, ref smoothVelocityY, verticalSmoothTime);
+        focusPosition += Vector2.right * currentLookAheadX;
         transform.position = (Vector3)focusPosition + Vector3.forward * -10;
     }
 
@@ -93,7 +113,8 @@ public class CameraFollow : MonoBehaviour
             top += shiftY;
             bottom += shiftY;
             centre = new Vector2((left + right) / 2, (top + bottom) / 2);
-            velocity = new Vector2(shiftX, shiftY);//скорость перемещения зоны фокуса
+            velocity = new Vector2(shiftX, shiftY);
+            // focus zone movement speed
         }
     }
 }
